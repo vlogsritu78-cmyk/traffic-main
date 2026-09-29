@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 18 — focused test of the NEW admin-uploadable welcome/advertisement image feature (backend + frontend) plus incidental regression on welcome-text save and broadcast history. Backend: 14/14 pytest tests pass (11 API + 3 bot.reply() unit ordering tests). Frontend: full upload -> preview -> reload-persist -> remove -> reload-persist cycle verified via Playwright on the public preview URL, including non-image rejection and locked/unlocked visibility. No blocking issues found; only 3 minor observations. No live Telegram broadcast was triggered.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/welcome-image", "issue": "No try/except around bot_module.get_broadcast_file(path); if the object-storage fetch fails (or the stored path was garbage-collected) the endpoint will bubble a 500 instead of a clean 404/502. bot.reply() already guards this same call with try/except."},
+      {"endpoint": "POST /api/admin/welcome-image", "issue": "Size cap is enforced only after the whole body is read into memory (await file.read() then len check), so a 10MB+ upload is fully buffered before rejection. Works (verified 400 'Image too large (max 10MB).'), but consider a streaming/Content-Length pre-check."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ConfigPanel // advertisement image", "issues": ["welcome-image-status auto-clears after 4s via setTimeout for BOTH success and error paths — the red error ('Only image files are allowed.') vanishes on its own, which an admin may miss. Suggest keeping error messages until the next action."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_welcome_image_iter18.py",
+    "/app/backend/tests/test_welcome_image_reply_iter18.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: wrap get_broadcast_file() in GET /api/welcome-image with try/except and return 404/502 instead of a 500.",
+    "Optional UX: do not auto-clear the red error text in welcome-image-status after 4s."
+  ],
+  "critical_code_review_comments": [
+    "public_settings() correctly exposes only has_welcome_image and never leaks welcome_image_path/_id/pin_hash — verified by assertion.",
+    "PUT /api/settings uses $set on text fields only, so saving welcome text does not clobber welcome_image_path — verified by test_settings_put_does_not_clobber_image.",
+    "bot.reply() sends reply_photo() before reply_text() and, on storage failure, still sends the text (graceful degradation) — verified by 3 unit tests with a fake Update."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_welcome_image_iter18.py",
+    "/app/backend/tests/test_welcome_image_reply_iter18.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Uploaded a 600x300 TEST_ad.png creative during testing and then removed it. Final DB state: has_welcome_image=false, welcome_ta/welcome_en/official_username unchanged from before testing (verified via GET /api/settings). No broadcasts sent.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md) — unlock worked via lock-chip -> pin-input -> unlock-submit.",
+  "context_for_next_testing_agent": "Welcome-image feature is fully verified end-to-end (iteration 18). Backend regression suite for it: /app/backend/tests/test_welcome_image_iter18.py (API, hits the public URL) and test_welcome_image_reply_iter18.py (bot.reply() ordering, monkeypatches bot.get_settings/get_broadcast_file, no network). Note: ConfigPanel's welcome-image-status auto-clears after 4s, so poll for it within ~3s of clicking upload/remove or you will read '(none)'. Also note config-save is correctly disabled when the textareas match the persisted (stripped) server value — do not treat that as a bug. Never trigger a live broadcast in preview (~59 real users).",
+  "rca_of_the_issue": "No defect found. Two earlier apparent failures were test artifacts: (1) 'upload status (none)' was caused by the intentional 4s auto-clear timer; (2) the second config-save click timing out was because the backend strips trailing whitespace, so restoring the original text left the form non-dirty and the save button correctly disabled."
+}

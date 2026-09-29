@@ -1,0 +1,34 @@
+{
+  "summary": "Tested iteration 12's webhook migration (replacing long-polling). Verified full activate flow end-to-end on backend + frontend: GET /api/bot/status new fields (is_live_here/webhook_active, polling_enabled correctly removed), POST /api/admin/telegram/activate (401 without auth, 200 with correct webhook_url/pending_update_count on success), POST /api/telegram/webhook/{secret} auth boundary (404 for wrong path secret, missing header, wrong header; 200 with both correct), and regressions (/api/r bridge 302, GET/PUT /api/settings auth-gating, POST /api/admin/broadcast sent>0). Frontend: reloaded dashboard while locked -> amber '[ not live here ]' pill shown correctly (webhook had been deleted beforehand to start from the documented clean state), terminal header shows 'transport ... webhook' (no 'long-poll' text found), unlocked with PIN 246810, activate-webhook-btn appeared, clicked it, activate-webhook-status showed 'this environment is now live', and bot-status-pill flipped to green '[ system online ]' after loadStatus() refresh -- conversions/unique-users counters also ticked up live confirming real webhook traffic was being received during the test.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_webhook_migration_iter12.py",
+    "/app/test_reports/pytest/pytest_iter12_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py bot_status(): correctly derives own_base from x-forwarded-host/host header and compares webhook_url.startswith(own_base) to compute is_live_here -- this correctly avoids relying on any .env value, matching the stated architecture goal.",
+    "activate_telegram endpoint correctly derives base_url from the incoming request's Host header (not .env), so it will always activate whichever environment (preview vs production) the admin is actually browsing -- verified webhook_url returned matched the preview domain exactly.",
+    "telegram_webhook endpoint double-checks the secret in both the URL path AND the X-Telegram-Bot-Api-Secret-Token header before processing -- good defense in depth; both checks independently verified to 404 on mismatch.",
+    "bot.py init_bot() is called unconditionally at startup with no start_polling call, confirming the 'safe in every environment' claim -- no risk of the previous env-var-scoping bug recurring since there's no polling flag to sync incorrectly.",
+    "Minor observation (not a bug): GET /api/bot/status makes a live get_webhook_info() Telegram API call on every request (no caching) -- fine at current traffic but could be cached for a few seconds if this endpoint is polled by many dashboard tabs simultaneously."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_webhook_migration_iter12.py"
+  ],
+  "success_rate": {"backend": "100% (13/13 tests passed)", "frontend": "100% (all UI/UX + activation flow checks passed)"},
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md) confirmed working, unchanged.",
+  "seed_data_creation": "None persisted beyond expected test side-effects: one harmless webhook update (fake message) sent to the /api/telegram/webhook/{secret} auth-success test, and one broadcast message 'testing broadcast still works after webhook migration' sent to real test users (per instructions, expected).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 12 (Telegram long-polling -> webhook migration) fully verified end-to-end, no bugs found. Final state left after testing: preview's webhook IS currently activated and pointing at the preview domain (is_live_here:true, webhook_active:true, online:true) as a natural result of running the activation flow test -- per instructions this does not need to be cleaned up/deleted; main agent will separately instruct the user to activate from the PRODUCTION dashboard as the real final step (production is untouched/untested by this agent, out of scope). If a future iteration wants to test the deactivated starting state again, first call Telegram's deleteWebhook API (bot token in backend/.env) before reloading the frontend.",
+  "rca of the issue": "N/A - no bugs found in this iteration's scope; this was a verification pass of the fix for the prior BOT_POLLING_ENABLED production outage bug, and the new webhook-based design (deriving public URL from request Host header rather than .env) was confirmed to correctly avoid that class of bug."
+}

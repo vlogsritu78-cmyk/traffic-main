@@ -1,0 +1,36 @@
+{
+  "summary": "Verified iteration 14's rewrite of the broadcast feature into a persistent, resumable job system (bot_broadcasts collection). CRITICAL resume scenario independently re-verified: manually inserted a bot_broadcasts doc with status='running', 27/29 users pre-marked in processed_user_ids, restarted backend via supervisor -- on startup resume_pending_broadcasts() correctly picked up the job, sent only to the 2 remaining users (one succeeded, one failed with 'Chat not found' since it was a fake test user_id), final doc had status='done', processed_user_ids with exactly 29 unique entries (no duplicates), sent+failed==total. Backend pytest suite (12 tests, all passed): 401 without auth on both POST /api/admin/broadcast and GET /api/admin/broadcast/latest; queued response shape {queued:true, job_id, total}; 400 on empty message+no file; GET /api/admin/broadcast/latest shape matches spec and reflects the actual latest doc, transitions running->done; 51MB file upload correctly rejected with 400 'File too large (max 50MB...)'; regression pass on /api/r (302), GET/PUT /api/settings, POST /api/admin/telegram/activate, GET /api/bot/status all passed -- no regression from iter 12's webhook migration. Frontend: unlocked panel with PIN 246810, sent a broadcast, confirmed broadcast-status showed 'queued — sending to 29 users now' immediately, then after ~4s updated to 'done — sent 21/29 — 8 failed' via the 3s poll, and remained stable/unchanged after 10s total confirming polling correctly stopped once status left 'running' (no infinite polling).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "run_broadcast_job (bot.py)", "issue": "8/29 users failed with real send errors during this test run (visible in bot_status TrafficStars/UI panel, e.g. 'Chat not found' for stale/fake test user_ids like 999888777 seeded by prior test iterations) -- not a bug in this iteration's logic, just accumulated test data noise in bot_users from earlier iterations."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_broadcast_job_iter14.py",
+    "/app/test_reports/pytest/pytest_iter14_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "resume_pending_broadcasts() + run_broadcast_job()'s done_ids skip logic is correct and verified empirically -- checkpointing after each 300-batch (via $push processed_user_ids + $set sent/failed) means at most one in-flight batch is at risk on a crash, which is a reasonable durability/throughput tradeoff for 100k-scale.",
+    "Single-upload-then-reuse file_id pattern (bot.py lines 328-345) is correct for the 50MB media case, avoiding 100k re-uploads of the same bytes; the first-recipient upload path also correctly checkpoints processed_user_ids/media_file_id so a crash right after the first send won't cause file_id to be null and force a re-upload+re-send to that same user.",
+    "Minor observation (not a bug): job_id ObjectId lookup in run_broadcast_job does not handle a malformed/missing _id gracefully beyond the `if not job or status != running: return` guard -- acceptable since job_id always originates internally (either from the POST handler's own insert or from resume's own find), never from user input.",
+    "MAX_BROADCAST_FILE_BYTES check happens after `await file.read()` (loads full content into memory first) -- for a single 50MB file this is fine, but worth noting there's no streaming size check; not a concern at current scale/limit.",
+    "GET /api/admin/broadcast/latest correctly excludes MongoDB _id and processed_user_ids array from the response (good -- avoids leaking a potentially huge array at 100k scale over the wire for a status poll)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_broadcast_job_iter14.py"
+  ],
+  "success_rate": {"backend": "100% (12/12 pytest passed, plus manual resume verification passed)", "frontend": "100% (broadcast queued->done flow + polling stop verified)"},
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md) confirmed working, unchanged.",
+  "seed_data_creation": "Inserted one manual bot_broadcasts doc directly into MongoDB to simulate a mid-send interruption for the resume test (cleaned up as part of natural job completion, left in DB as historical record like other job docs). 3 additional TEST_-prefixed broadcasts sent to the ~29 real test users during pytest + manual + Playwright runs, consistent with prior iterations' allowance.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 14's resumable broadcast job system is fully verified: resume-after-restart logic (the most safety-critical piece) independently confirmed with no duplicates/no missed users, all new/changed endpoints tested with auth and shape assertions, 50MB file limit enforced, and frontend polling lifecycle (queued -> sending/done, then poll stops) confirmed via Playwright. No bugs found. Webhook migration (iter 12) regression-checked lightly per instructions, no issues. bot_users collection now has some stale/fake test user_ids (e.g. 999888777, 1823327921 etc.) from prior iterations' testing that will always show as 'failed' sends (Chat not found) -- this is pre-existing test data noise, not a new issue, and inflates the 'failed' count in every future broadcast test; future agents should be aware sent+failed==total is still the correct invariant to check, not failed==0.",
+  "rca_of_the_issue": "N/A -- no bugs found this iteration. This was a verification-only pass of a described rewrite; independent reproduction of the resume scenario matched the main agent's own prior manual verification exactly."
+}

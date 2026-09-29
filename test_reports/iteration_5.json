@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 5 (editable admin panel + PIN gate). Backend: 56 passed, 1 xfailed (documented brute-force bypass). Frontend: end-to-end verified — locked/unlocked toggle, PIN entry with wrong/right feedback, sessionStorage token handling, inline account edit with server validation, welcome text edit + persistence across reload, defaults reset, relock, invalid-token session-expiry re-opens PIN form. All restore invariants met (official_username=Heheheehejvjsjsjsjdjjdjdbdh, welcome_ta/en=defaults, PIN=246810, admin_attempts wiped).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/admin/unlock",
+        "issue": "Brute-force lockout is bypassable in this K8s ingress deployment. request.client.host is the reverse-proxy pod IP, which round-robins across multiple pods. Each wrong-PIN attempt hits a different upstream and is bucketed under a different admin_attempts._id, so the counter never reaches 5 and the 429 lockout never triggers. Reproduced by looping 3 wrong PINs from a single curl session — attempts landed under two different pod IPs (10.208.135.198 / 10.208.135.194). Fix: derive client IP from the first entry of X-Forwarded-For (with a trust boundary), or key attempts by a stable identifier (e.g. session cookie + IP hash), or add a global attempts counter as a fallback ceiling.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "PUT /api/settings",
+        "issue": "Empty official_username ('') is rejected as 422 by Pydantic (min_length=1) returning a list-shaped detail, not the 400+string contract described in the review. UI works because fmtError() handles both shapes, but the response contract is inconsistent with the other clean_username errors."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ConfigPanel",
+        "issue": "Session-expiry 401 during PUT /api/settings correctly re-opens the PIN form and does not crash, but the error message set via setMsg(fmtError(e)) is unmounted immediately because config-status lives inside the `{unlocked && ...}` block. Result: user sees the PIN form pop up with zero explanation. Move the status/error message outside the `unlocked` gate, or surface the 401 via a top-level toast/banner.",
+        "selector": "[data-testid=\"config-status\"]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration5_admin.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/iter5_results.xml"
+  ],
+  "action_items": [
+    "Fix brute-force IP tracking behind K8s ingress (client.host is a rotating pod IP, so lockout never triggers).",
+    "Consider moving config-status / error banner outside the unlocked-only block so session-expiry 401s are visibly communicated to the user.",
+    "Optional: normalise empty official_username to a 400 with a string detail for API consistency (currently 422 list)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:check_lockout keys admin_attempts by request.client.host. Behind the k8s reverse proxy this is the LB IP which varies per request → lockout is trivially defeated. Add trust-proxy X-Forwarded-For handling (fastapi ProxyHeaders or `starlette.middleware.trustedhost` + parsing the leftmost XFF entry) before shipping this as a security feature.",
+    "ConfigPanel.js renders <span data-testid=\"config-status\">…</span> inside the `{unlocked && (...)}` fragment. On a 401, saveSettings → lock() flips unlocked=false and the status message set by setMsg(fmtError(e)) is unmounted before the user can read it.",
+    "backend_test.py originally referenced bot.KEYBOARD which no longer exists (keyboard is now built inside reply()). I rewrote TestBotModule::test_keyboard_built_in_reply_matches_live_settings to actually exercise reply() with a fake message and assert the button URL matches the live bot_settings doc."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration5_admin.py"
+  ],
+  "success_rate": {"backend": "98% (56/57 hard-pass, 1 documented xfail — real ingress bypass)", "frontend": "100% functional (1 medium UX issue: silent session-expiry)"},
+  "seed_data_creation": "No permanent seed. All test-created settings restored to originals; admin_attempts collection cleared; PIN restored to 246810 and re-verified.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md). Verified working at the end of testing.",
+  "context_for_next_testing_agent": "Backend test files: backend_test.py (33 iter1-4 regression + iter5 keyboard rewrite) + test_iteration5_admin.py (24 iter5 tests, TestBruteForce is xfail-strict-false and will show as XPASS if brute force is properly fixed — flip to plain @pytest.mark then). Restore invariants: official_username='Heheheehejvjsjsjsjdjjdjdbdh', welcome_ta/en=bot_content.DEFAULT_TA/DEFAULT_EN, PIN=246810, db.admin_attempts wiped. If iterating on brute-force, take X-Forwarded-For into account when testing.",
+  "rca_of_the_issue": "Brute-force bypass RCA: FastAPI request.client is populated from the TCP peer socket. In this Kubernetes deployment, the ingress LB terminates TLS and proxies to backend pods with the peer being the LB pod. Repro: `for i in 1 2 3; do curl -X POST $API/api/admin/unlock -d '{\"pin\":\"000000\"}'; done` — inspect db.admin_attempts.find() → multiple _id values from the same client session. Mitigation: enable trusted-proxy handling and use XFF[0]; or add a session-cookie-scoped counter as a secondary lockout dimension."
+}

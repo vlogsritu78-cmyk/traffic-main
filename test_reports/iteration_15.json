@@ -1,0 +1,33 @@
+{
+  "summary": "Verified iteration 15's additive diagnostic improvement to the broadcast feature: categorized failure reasons (error_counts). Backend: 4/4 pytest tests passed -- text-only broadcast and media(image)-attached broadcast both confirmed the invariant sent+failed==total AND sum(error_counts.values())==failed; error_counts keys restricted to known labels (blocked_bot, invalid_chat, rate_limited, network_timeout, other); auth enforced (401) on both POST /api/admin/broadcast and GET /api/admin/broadcast/latest without a token. Frontend: unlocked panel with PIN 246810, sent a real broadcast to the 58 preview users via UI, confirmed broadcast-status text transitioned 'queued -> sending to 58 users now' then polled to 'done — sent 41/58 — 17 failed (16 blocked the bot, 1 chat not found)' -- friendly labels used (not raw codes like blocked_bot/invalid_chat), parenthetical breakdown sums exactly to the failed count (16+1=17). Regression: status transitioned running->done correctly via polling and stopped once done (consistent with iter14's verified resumable job system); error_counts field addition did not break anything.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_broadcast_error_counts_iter15.py",
+    "/app/test_reports/pytest/pytest_iter15_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_send_to_user()'s categorization (Forbidden->blocked_bot, BadRequest->invalid_chat, RetryAfter-after-retry->rate_limited, TimedOut/NetworkError->network_timeout, else->other) is correctly ordered (specific exceptions before generic Exception) and matches python-telegram-bot's exception hierarchy.",
+    "run_broadcast_job's batch $inc of error_counts.{cat} via Counter is correct and atomic per-batch; the first-upload path also correctly $inc's error_counts.other on failure (verified with a live media broadcast in this iteration).",
+    "Frontend describeErrors() correctly filters zero-count entries and falls back to the raw key if a label is somehow missing (defensive, good). ERROR_LABELS mapping matches backend's 5 categories exactly.",
+    "No bugs found. This is a clean, small, additive change consistent with the problem statement's diagnosability goal."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_broadcast_error_counts_iter15.py"
+  ],
+  "success_rate": {"backend": "100% (4/4 pytest passed)", "frontend": "100% (broadcast send + friendly error breakdown verified)"},
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md) confirmed working, unchanged.",
+  "seed_data_creation": "2 additional TEST_-prefixed broadcasts sent to the ~58 real preview test users during pytest (1 text-only, 1 with a tiny generated PNG) + 1 more via Playwright UI flow, consistent with prior iterations' allowance.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 15's error_counts diagnostic feature is fully verified end-to-end (backend invariant + frontend friendly labels) for both text-only and media-attached broadcasts. No bugs found. bot_users still contains stale/fake test user_ids from earlier iterations that will always show as failed sends (blocked_bot/invalid_chat) -- this is expected pre-existing test noise, not a new issue; sent+failed==total (and now sum(error_counts)==failed) remain the correct invariants to check, not failed==0.",
+  "rca_of_the_issue": "N/A -- no bugs found this iteration; the original problem (failure reason only in ephemeral logs) is resolved by this categorized error_counts field + friendly frontend breakdown."
+}

@@ -1,0 +1,128 @@
+{
+  "theme": "dark",
+  "archetype": "Retro-Futurism / Cyberpunk (Electric & Neon)",
+  "typography": {
+    "font_families": {
+      "heading": "'JetBrains Mono', 'Noto Sans Tamil', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      "body": "'JetBrains Mono', 'Noto Sans Tamil', ui-monospace, monospace"
+    },
+    "rules": {
+      "anti_default": "Absolutely NO Inter, Roboto, or standard Sans-Serifs for headings. Use monospace everywhere to enforce the hacker terminal aesthetic.",
+      "hierarchy": {
+        "h1": "text-2xl sm:text-3xl tracking-tighter font-bold uppercase",
+        "h2": "text-xl sm:text-2xl tracking-tight",
+        "data_values": "text-4xl sm:text-5xl font-black tracking-tighter text-zinc-50",
+        "labels": "text-xs uppercase tracking-[0.2em] text-zinc-500",
+        "body": "text-sm text-zinc-400 leading-relaxed"
+      }
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "base": "bg-zinc-950",
+      "surface": "bg-zinc-900/40",
+      "surface_hover": "bg-zinc-800/60"
+    },
+    "borders": {
+      "default": "border-zinc-800",
+      "active": "border-emerald-500/50",
+      "focus": "border-cyan-500/50"
+    },
+    "text": {
+      "primary": "text-zinc-50",
+      "secondary": "text-zinc-400",
+      "muted": "text-zinc-600"
+    },
+    "accents": {
+      "neon_green": "text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.3)]",
+      "cyber_cyan": "text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]",
+      "warning": "text-amber-400",
+      "error": "text-rose-500"
+    },
+    "rules": {
+      "tinted_grey": "Use zinc (cool tinted grey) instead of neutral gray.",
+      "glow": "Instead of background gradients, rely on colored text with drop shadows for the 'neon' effect."
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Retro-Futurism (The Terminal Look). Use flat solid dark backgrounds with 1px borders.",
+    "textures": "Include a subtle CSS scanline overlay pointer-events-none over the entire layout (e.g., repeating linear gradient).",
+    "corner_radius": "Strictly angular. Use `rounded-none` or maximum `rounded-sm` (2px) to keep the hard, technical edge.",
+    "hacker_motifs": "Use ASCII brackets around labels (e.g., `[ SYSTEM ONLINE ]`), a blinking terminal cursor `_` at the end of the bot username, and monospaced data alignment."
+  },
+  "layouts": {
+    "grid_system": "High Density Grid (For Dashboards / Analytics).",
+    "desktop": "grid-cols-12 gap-4",
+    "mobile": "grid-cols-1 gap-4",
+    "structure": [
+      {
+        "section": "Header/Hero",
+        "span": "col-span-full",
+        "content": "Bot Identity, Blinking Cursor, Live Status indicator (Right aligned or adjacent)."
+      },
+      {
+        "section": "Stats Row",
+        "span": "col-span-12 md:col-span-4 for each of the 3 stats",
+        "content": "Conversions, Unique Users, Today. Stacked layout: Label top, giant number bottom."
+      },
+      {
+        "section": "Postback Health",
+        "span": "col-span-full",
+        "content": "Full width row. Show 'N sent', 'N failed', attribution ratio. Use green/red colored text for status."
+      },
+      {
+        "section": "Offer URL",
+        "span": "col-span-full",
+        "content": "Monospace URL display with a highly visible Copy button that switches to 'Copied' state."
+      }
+    ],
+    "spacing": "Use tight padding within cards (`p-4` or `p-6`), but leave comfortable margins around the main container (`p-4 sm:p-8`)."
+  },
+  "components": {
+    "cards": "Raw `div` containers. Apply `border border-zinc-800 bg-zinc-900/40 backdrop-blur-md p-6`. No shadows on the card itself, keep it flat.",
+    "buttons": "Rectangular, dense. `border border-zinc-700 hover:border-emerald-400 hover:text-emerald-400 transition-colors bg-transparent`. For the copy button, include a Lucide icon.",
+    "status_indicator": "Small rectangular badge. `border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 px-2 py-1 text-xs`. Must include a pulsing `w-2 h-2` dot.",
+    "charts": "Recharts is permitted if a sparkline is added, but keep it minimal (emerald stroke, transparent fill, no grid lines, no axes).",
+    "icons": "Use `lucide-react` with a technical stroke width (e.g., `strokeWidth={1.5}`)."
+  },
+  "motion": {
+    "framer_motion": true,
+    "entrance": "Staggered fade-in and slight Y-translate (boot-up sequence effect).",
+    "micro_interactions": "Hover states must snap or transition quickly (e.g., `duration-150`). Avoid slow, floaty animations.",
+    "live_data": "When numbers change, briefly flash the text color to white or cyan to indicate an update."
+  },
+  "accessibility": {
+    "contrast": "Ensure text-to-background ratio is above 4.5:1. `text-zinc-400` on `zinc-950` is sufficient.",
+    "focus": "All interactive elements (Copy button, links) must have `focus:ring-1 focus:ring-cyan-500 focus:outline-none`.",
+    "motion_preference": "Respect `prefers-reduced-motion`. Disable staggered boot sequences if enabled."
+  },
+  "data_testids": {
+    "container": "bot-status-page",
+    "status": "bot-status-pill",
+    "identity": "bot-username",
+    "target_link": "official-link",
+    "stat_starts": "stat-starts",
+    "stat_users": "stat-users",
+    "stat_today": "stat-today",
+    "postback": "postback-row",
+    "url_block": "ad-url-block",
+    "url_value": "ad-url-value",
+    "copy_btn": "copy-ad-url"
+  },
+  "instructions_to_main_agent": [
+    "You MUST write in .js (React 19 + CRA), not .tsx.",
+    "Apply all CSS via Tailwind utility classes, avoiding App.css unless defining the scanline animation via `@layer utilities`.",
+    "DO NOT use rounded corners on cards (`rounded-xl` etc.). Force sharp edges to maintain the terminal hacker look.",
+    "DO NOT center align the app container. Keep a structured, top-down left-aligned flow.",
+    "The footer must accommodate the Tamil text 'தமிழ்' gracefully, ensure font stacking is respected.",
+    "Implement the 'Copy URL' functionality using standard browser clipboard API, showing a temporary success state.",
+    "Use framer-motion to create a 'system boot' sequence when the dashboard first mounts."
+  ],
+  "universal_guidelines": [
+    "Never use generic centered layouts, simplistic gradients, and uniform styling.",
+    "Never use purely transparent backgrounds under content; use backdrop blurs or dark semi-transparent overlays.",
+    "Every interactive element MUST include its specific `data-testid`.",
+    "Do not add universal transitions (`transition: all`), animate specific properties only.",
+    "Do NOT use Space Grotesk or standard Inter for this project."
+  ]
+}

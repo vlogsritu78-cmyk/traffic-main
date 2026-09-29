@@ -1,0 +1,30 @@
+{
+  "summary": "Verified the BOT_POLLING_ENABLED fix that stops preview from competing with production for the Telegram getUpdates connection (root cause of 61-vs-25 conversion mismatch). All checks pass: GET /api/bot/status now returns polling_enabled:false and online:false while all other historical fields (bot_username, total_starts=61, unique_users=28, postbacks_sent/failed, starts_attributed/unattributed) return correctly with no errors. Backend logs confirm 'bot polling disabled in this environment (BOT_POLLING_ENABLED=false)' logged on every startup after the fix, and the last telegram.error.Conflict entry (line 1178) occurs strictly BEFORE the fix's first 'polling disabled' log line (line 1193) -- zero Conflict errors since. Bridge (/api/r), public GET /api/settings, admin unlock (PIN 246810), and PUT /api/settings (full payload) all work and persist/restore correctly -- no regression. Frontend dashboard renders correctly with the new amber '[ dev mode — live on production ]' pill (not red/green), and all other dashboard elements (conversions=61, unique users=28, today=61, postback stats, welcome payload editor, lock chip) render and function normally.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/settings", "issue": "Endpoint appears to require the full settings object (rejects partial payload with 400 'Telegram username must be 5-32 characters' when only welcome_en is sent, and returns 422 on malformed partial JSON) -- likely by design as a full-replace PUT, but worth confirming with main agent if partial/PATCH-style updates were ever intended. Not a regression from this fix; pre-existing behavior."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py startup/shutdown handlers correctly gate on BOT_POLLING_ENABLED with sane default ('true' if unset) so production is unaffected.",
+    "bot_status() correctly derives online = bool(meta) and polling_enabled, avoiding a misleading 'online:true' claim in a non-polling environment.",
+    "Frontend 3-way pill branch (online / pollingDisabledHere / offline) correctly prioritizes error > online > pollingDisabledHere > offline, matching expected UX.",
+    "No code changes needed; fix verified working as intended."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin PIN: 246810 (confirmed working)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "This iteration confirmed the BOT_POLLING_ENABLED preview-only fix works: polling_enabled/online fields correct, no new Conflict errors since restart, bridge/settings/auth regression clean, frontend pill shows amber dev-mode state correctly. Real bot traffic now goes only to production as expected -- do not expect /start events to increment in preview going forward; this is correct behavior, not a bug. If user reports conversion mismatch again, check production's own /api/bot/status (inaccessible to this agent) rather than preview's DB.",
+  "rca of the issue": "Original bug: both preview and production backends embedded the same Telegram poller (from iteration 9's architecture change) and used the same TELEGRAM_BOT_TOKEN, causing Telegram's single-long-poll-per-token constraint to split updates randomly between two separate Mongo databases. Fix: BOT_POLLING_ENABLED=false added only to preview's .env, gating start_bot()/stop_bot() calls in server.py startup/shutdown, with bot_status() and frontend updated to reflect this non-polling dev state transparently instead of showing a false 'offline/broken' signal. Verified via logs (no Conflict errors after fix) and API/UI checks."
+}

@@ -1,0 +1,34 @@
+{
+  "summary": "Independently re-verified iteration 16's blocked-user exclusion feature end-to-end. Backend: 4/4 pytest tests passed -- GET /api/bot/status blocked_users count matches direct DB count_documents({blocked:True}); POST /api/admin/broadcast's upfront `total` correctly excludes blocked users (58 total, 18 pre-existing blocked -> total=40, matching main agent's own numbers exactly); ran two consecutive broadcasts confirming totals stay consistent and regression invariants (sent+failed==total, sum(error_counts)==failed) hold (both completed sent=40/failed=0/error_counts={} since remaining 40 users are real/deliverable); verified track()'s un-block-on-interact by simulating a webhook /start from a currently-blocked user_id -- confirmed track() runs before reply() in on_start (so the fake/undeliverable chat's reply_text failure, if any, doesn't block the DB update) and the user's blocked field flipped from true to false in db.bot_users, dropping blocked_users from 18 to 17. Frontend: unlocked panel with PIN 246810, confirmed 'unique users' Cell (stat-users) renders the new sub-label '17 blocked' directly under the '58' count, matching the live blocked_users value from /api/bot/status -- clean rendering, correct contrast, no layout issues.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_blocked_users_iter16.py",
+    "/app/test_reports/pytest/pytest_iter16_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_mark_blocked() is called from both the first-upload path and the main batch loop in run_broadcast_job(), correctly scoped to only 'blocked_bot' and 'invalid_chat' categories (not rate_limited/network_timeout/other, which are transient and shouldn't permanently exclude a user) -- correct judgment call.",
+    "track()'s $set of blocked: False on every interaction is a clean, simple self-healing mechanism; on_start calls track() before reply(), so un-blocking is not dependent on the reply actually succeeding -- confirmed via live webhook simulation with a non-deliverable chat id (webhook still returned 200 and the DB update completed).",
+    "run_broadcast_job()'s all_user_ids query now filters blocked:{$ne:true} consistently with server.py's total count -- both use the same filter shape, so the upfront total the admin sees before queuing matches what the job will actually attempt.",
+    "Minor observation (not a bug): GET /api/bot/status's unique_users field still counts ALL bot_users including blocked ones, while blocked_users is a separate count -- this is correct/expected since the frontend combines both (58 total, 17 blocked as sub-label) rather than subtracting them, and this matches the intended UX of showing total reach vs. currently-reachable.",
+    "No bugs found. Clean, minimal, additive change; correctly reuses the existing error-categorization from iteration 15 to decide what counts as a permanent block vs a transient failure."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_blocked_users_iter16.py"
+  ],
+  "success_rate": {"backend": "100% (4/4 pytest passed)", "frontend": "100% (sub-label rendering verified against live status API)"},
+  "test_credentials": "Admin PIN 246810 (from /app/memory/test_credentials.md) confirmed working, unchanged.",
+  "seed_data_creation": "2 additional TEST_-prefixed broadcasts sent to the 40 currently-unblocked preview users during pytest (both completed sent=40/failed=0), plus 1 synthetic webhook /start simulating a blocked user id 5924401094 re-interacting (which un-blocked them, dropping db blocked count from 18 to 17).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 16's blocked-user exclusion + un-block-on-interact feature is fully verified end-to-end (backend invariants, DB state transitions, and frontend sub-label). Current preview state: 58 total bot_users, 17 blocked (was 18 before this test run's un-block verification), 41 not blocked -- reflects real state after this session's tests, not a fresh reset. No bugs found across iterations 14, 15, 16 (resumable jobs, error diagnostics, blocked exclusion all compose correctly together).",
+  "rca of the issue": "N/A -- no bugs found this iteration; the original problem (broadcasts wasting attempts on users who blocked the bot) is resolved by _mark_blocked() + the blocked:{$ne:true} filter in both the broadcast query and the upfront total count, with automatic self-healing via track()'s blocked:False reset on any subsequent interaction."
+}

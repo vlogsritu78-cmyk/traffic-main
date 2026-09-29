@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 17 verified the NEW Broadcast History feature end-to-end. Backend GET /api/admin/broadcast/history: 4/4 pytest tests pass (401 without token, 401 with bad token, correct payload shape/no _id/80-char preview cap/limit<=20/newest-first sort, and a synthetic newest-job injection proving ordering + error_counts + completed_at pass-through). Frontend: unlock via lock-chip + PIN 246810 works, broadcast-history-toggle expands broadcast-history-list with 17 rows (matches 17 docs in bot_broadcasts), row click expands to show 'failure breakdown (1 chat not found) completed <ts>' and collapses again, second toggle click unmounts the list. Verified on desktop 1920x1080 and mobile 390x844. Regressions verified: welcome payload save (welcome-ta/en + config-save -> 'saved - live on the bot', values persisted after reload and restored), change PIN (change-pin-input/change-pin-save -> 'PIN updated', PIN 246810 still valid afterwards via API + UI), unlock/lock chip flow (locking hides the whole broadcast/history block). Live broadcast send was intentionally NOT executed (would DM ~55 real Telegram users; test_credentials.md forbids DMing real users) - only the send button enable/disable + attach button states were verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ConfigPanel broadcast history row (status line)",
+        "issue": "Literal escape sequence rendered instead of a middot separator. /app/frontend/src/ConfigPanel.js line 416 has ' \\u00b7 ' as bare JSX *text* (JSX text children do not process backslash escapes), so every row shows 'DONE \\U00B7 0/1' (uppercased by the tracking/uppercase class) instead of 'DONE \u00b7 0/1'. Note line 417 is inside a template literal and renders correctly, which is why the same row shows both a broken and a correct separator. Fix: use {\" \\u00b7 \"} or a real \u00b7 character.",
+        "selector": "[data-testid^='broadcast-history-row-']",
+        "priority": "HIGH (cosmetic but on every history row, clearly visible)"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "ConfigPanel broadcast history @390px (mobile)",
+        "issues": [
+          "Row header is a single non-wrapping flex row: the status span ('DONE \u00b7 0/42 \u00b7 42 FAILED') consumes most of the width and the message preview collapses to ~8 chars ('object s\u2026'/'objec\u2026'), making rows unidentifiable on mobile. Consider flex-col / status on its own line below the preview under sm."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_broadcast_history_iter17.py",
+    "/app/backend/tests/test_admin_auth_iter8.py",
+    "/app/test_reports/pytest/iter17_final.xml"
+  ],
+  "action_items": [
+    "Fix ConfigPanel.js:416 literal '\\u00b7' JSX text -> render an actual middot.",
+    "Optional: stack preview/status vertically in history rows on mobile widths.",
+    "Housekeeping: /app/backend/tests/backend_test.py has 9 stale failures from the pre-webhook era (asserts bot username 'tamil_best_service_bot' vs live 'TRUSTEDNO1_BOT', asserts a polling bot supervisor process, asserts no webhook configured, /api/status & /api/clicks shape). These are obsolete test expectations, not product bugs - please prune/update them so future regression runs are clean.",
+    "Housekeeping: /app/memory/test_credentials.md still lists the old bot handle @tamil_best_service_bot; PRD says @TRUSTEDNO1_BOT."
+  ],
+  "critical_code_review_comments": [
+    "ConfigPanel.js:416 - escape sequences in bare JSX text are not interpreted; must be wrapped in a JS expression/template literal.",
+    "broadcast_history() indexes job['status'], job['sent'], job['failed'], job['total'] with hard keys - a legacy/partial broadcast doc missing any of these would 500 the whole endpoint. Prefer job.get(k, 0/'unknown').",
+    "db.bot_broadcasts.find({}).sort('created_at', -1) relies on created_at being an ISO *string* for all docs (verified: all 17 are str). If any writer ever stores a datetime, BSON mixed-type ordering will silently mis-sort. Consider a created_at index and a single storage type.",
+    "loadHistory() swallows the error into setHistory([]), so an API failure is indistinguishable from 'no broadcasts sent yet.' - surface an error state instead."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_broadcast_history_iter17.py (new)",
+    "/app/backend/tests/test_admin_auth_iter8.py (fixed module-level crash: REACT_APP_BACKEND_URL now falls back to /app/frontend/.env via dotenv)"
+  ],
+  "success_rate": {"backend": "100% (9/9 on iter17 + iter8 admin auth suites)", "frontend": "100% of history feature flows; 1 cosmetic render bug"},
+  "seed_data_creation": "Temporarily inserted and deleted one synthetic bot_broadcasts doc (_id='TEST_hist_iter17') inside the backend test; no residue. No real broadcast was sent, no Telegram DMs generated. PIN re-saved to the same value 246810.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin PIN 246810 (still valid after the change-PIN regression test)",
+  "context_for_next_testing_agent": "bot_broadcasts holds 17 docs (not ~59; 59 is the blocked-user count), so history shows 17 rows and never hits the 20 limit. Do NOT run a live broadcast in this preview DB - it DMs ~55 real users; use a synthetic bot_broadcasts insert instead (see test_broadcast_history_iter17.py). Admin token is in-memory only, so a page reload relocks the UI; after page.reload() wait ~2.5s before clicking lock-chip or the toggle click is lost (flaky twice with 1.2s waits, 3/3 reliable with 2.5-3s).",
+  "rca_of_the_issue": "Root cause of the visible '\\U00B7' text: in JSX, string escape sequences are only processed inside JS expressions/string literals. ConfigPanel.js:416 places ' \\u00b7 ' directly as element text between two {} expressions, so React renders the 8 literal characters; the parent's uppercase/tracking classes then display it as '\\U00B7'. One-line fix."
+}

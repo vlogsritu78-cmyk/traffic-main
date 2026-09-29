@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 19 focused on the twice-reported settings cross-contamination bug. Backend: 18 pytest tests (new /app/backend/tests/test_settings_partial_iter19.py) covering PUT /api/settings as a true partial update in BOTH directions, invalid-input isolation, backward-compatible full payload, empty-body rejection, auth guard, plus incidental regression on bot/status, broadcast history/latest, broadcast validation (no live send), change-PIN roundtrip and welcome-image upload/serve/remove — 18/18 passed. Frontend: Playwright e2e on the public preview URL — unlock via PIN, welcome-text-only save, username-only save, invalid username, empty-Tamil-block save, defaults reset, broadcast history toggle. All passed; the reported bug is NOT reproducible in either direction. Dashboard state restored to the demo values (official_username=Heheheehejvjsjsjsjdjjdjdbdh, DEFAULT_TA/DEFAULT_EN, no welcome image, PIN 246810).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware", "issue": "allow_credentials=True combined with allow_origins='*' (CORS_ORIGINS in backend/.env). Browsers reject credentialed requests with a wildcard origin; harmless today because auth is a Bearer header, but it is an invalid/misleading config. Preflight confirmed 'access-control-allow-origin: *'."},
+      {"endpoint": "/api/admin/unlock (lockout store)", "issue": "admin_attempts counters below MAX_ATTEMPTS never decay/expire (only docs already at the limit are deleted after the 15-min window), so isolated wrong PINs accumulate forever per IP. Found stale docs: 157.51.89.239 count=5 from 2026-08-10, 223.178.80.146 count=1."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ConfigPanel status message", "issue": "setTimeout(() => setMsg(''), 4000) is never cleared, so a stale timer from a previous save wipes a newly-set status/error message early (observed: a validation error disappeared ~1.5s after appearing because the prior 'saved' timer fired). Cosmetic only.", "selector": "[data-testid=\"config-status\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_settings_partial_iter19.py",
+    "/app/test_reports/pytest/iter19_settings.xml"
+  ],
+  "action_items": [
+    "No functional fix required for the reported bug — partial-update PUT /api/settings verified correct in both directions at API and UI level.",
+    "Optional: clear the ConfigPanel status timeout with clearTimeout before setting a new one so error messages aren't wiped by stale timers.",
+    "Optional: set an explicit CORS_ORIGINS list instead of '*' since allow_credentials=True is enabled."
+  ],
+  "critical_code_review_comments": [
+    "write_settings() correctly gates each field on `is not None`, so PUT {welcome_ta, welcome_en} never calls clean_username() and PUT {official_username} never touches the welcome pair — the structural fix is sound. Note the welcome pair is still coupled by design: sending only welcome_ta backfills welcome_en from the DB, which is the intended behaviour.",
+    "public_settings() explicitly whitelists fields, so Mongo _id never leaks; verified across GET/PUT/welcome-image responses.",
+    "/app/frontend/src/App.js saveSettings(patch) now PUTs the raw patch (no merge with React state) — matches the backend contract and removes the previous state-merge race."
+  ],
+  "updated_files": ["/app/backend/tests/test_settings_partial_iter19.py"],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% (all e2e assertions passed)"},
+  "seed_data_creation": "Temporary values only (TEST_iter19_user / TEST_full_iter19 / TEST_ui_user19 usernames, TEST_UI_TA/TEST_UI_EN welcome text, one 1x1 PNG welcome image) — all reverted; final GET /api/settings matches DEFAULT_TA/DEFAULT_EN and username Heheheehejvjsjsjsjdjjdjdbdh, has_welcome_image=false. PIN briefly changed to 999111 and restored to 246810 (verified by re-unlock).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin PIN 246810 (verified working after the change-PIN roundtrip test)",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_settings_partial_iter19.py` as the regression suite for settings partial update. Note: multipart endpoints (broadcast, welcome-image) must NOT be called from a requests.Session that has Content-Type: application/json set — it yields a 422 'file field required'; use a fresh session (that was a test-harness bug, not an app bug). Never POST a non-empty broadcast in preview (~59 real Telegram users).",
+  "rca_of_the_issue": "Original bug: PUT /api/settings was a full-replace that required and re-validated all three fields on every save, so a welcome-text save re-ran clean_username() (username error) and a username save re-ran the welcome-pair check (welcome error). Current code validates/updates only fields present in the request body, and the frontend sends field-scoped patches. Verified fixed in both directions via API and UI."
+}

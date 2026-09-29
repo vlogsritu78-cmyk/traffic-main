@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 6 retest — all three fixes verified. Backend: 63/63 passed (was 56 + 1 xfail). Frontend: all flows OK (locked textareas, PIN gating, wrong/right PIN, auth-notice banner on 401, sessionStorage token flow, inline account edit with server validation, welcome edit + persistence across reload, config-reset, re-lock, no CRA overlay, no console errors other than expected 401/400 from planted-garbage-token & bad-username, Tamil in footer, no horizontal overflow at 390x844). All restore invariants met (official_username=Heheheehejvjsjsjsjdjjdjdbdh, welcome_ta/en=defaults, PIN=246810, admin_attempts wiped).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration5_admin.py",
+    "/app/test_reports/pytest/iter6_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py inspected: exactly one app.include_router(api_router), one CORSMiddleware block, one @app.on_event('startup'), one @app.on_event('shutdown'). No endpoint is defined twice. Fix-3 (SettingsUpdate.default='' + explicit 400 for blank welcome blocks) is correctly ordered — Pydantic no longer intercepts, clean_username raises 400 with a string first, then the blank-block guard raises 400 with a string.",
+    "client_ip() correctly prefers left-most X-Forwarded-For, then x-real-ip, then request.client.host. record_failure() upserts BOTH per-IP and __global__ buckets in a single loop; clear_failures() uses delete_many({_id: {$in: [ip, '__global__']}}) so a successful unlock wipes both. Verified end-to-end with X-Forwarded-For header manipulation.",
+    "Note: __global__ ceiling is a genuinely global counter — ANY successful unlock in the world clears it. This is fine for a single-admin bot but is worth documenting; the iter6 test therefore retries once if the counter is cleared mid-test by a concurrent successful unlock (parallel pytest worker)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5_admin.py"
+  ],
+  "success_rate": {"backend": "100% (63/63)", "frontend": "100%"},
+  "seed_data_creation": "None. All modifications reverted. bot_settings restored to (Heheheehejvjsjsjsjdjjdjdbdh, DEFAULT_TA, DEFAULT_EN, PIN=246810). admin_attempts wiped.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin PIN 246810 verified working at the end of testing.",
+  "context_for_next_testing_agent": "Iteration 6 fixes are all verified: (1) brute-force lockout now trips at 6th wrong PIN with a stable X-Forwarded-For, and the __global__ ceiling trips at attempt #21 even with rotating XFF; a successful unlock clears BOTH buckets. (2) auth-notice banner shows on 401 during save/changePin and is cleared by successful unlock; PIN form re-opens. (3) empty username → 400 string; blank welcome_ta or welcome_en → 400 string 'Both the Tamil and English blocks are required.'; rejected writes do not partially mutate bot_settings. Test suite: 63 tests, all pass on 2-worker xdist. Brute-force ceiling test is marked xdist_group('bruteforce_serial') and has a 1-retry guard because a concurrent successful unlock in a parallel worker will clear __global__.",
+  "rca_of_the_issue": "N/A — all three previously reported defects are fixed and re-verified with dedicated tests."
+}
